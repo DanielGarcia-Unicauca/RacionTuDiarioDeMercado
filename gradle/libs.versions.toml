@@ -9,6 +9,20 @@ activityCompose = "1.8.0"
 kotlin = "2.2.10"
 composeBom = "2026.02.01"
 navigationCompose = "2.9.8"
+splashscreen = "1.0.1"
+lifecycle = "2.8.7"
+retrofit = "3.0.0"
+# NOTE: the requested `okhttp = "5.1.0"` does not exist on Maven Central. The newest
+# published releases are 4.12.0 (stable) and 5.0.0-alpha.16 (pre-release). 4.12.0 is
+# also the exact version Retrofit 3.0.0 depends on, so it is the consistent choice.
+okhttp = "4.12.0"
+moshi = "1.15.2"
+coil = "3.2.0"
+firebaseBom = "34.4.0"
+googleServices = "4.4.4"
+coroutines = "1.9.0"
+turbine = "1.2.0"
+mlkitBarcodeScanning = "17.3.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -28,7 +42,48 @@ androidx-compose-material3 = { group = "androidx.compose.material3", name = "mat
 androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 
+# AndroidX foundation extras
+androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "splashscreen" }
+androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycle" }
+androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycle" }
+
+# Networking / serialization
+squareup-retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
+squareup-moshi = { group = "com.squareup.moshi", name = "moshi", version.ref = "moshi" }
+# Runtime artifact that ships KotlinJsonAdapterFactory. Required TODAY: the DTOs declare
+# @JsonClass(generateAdapter = true) but this module has no annotation processor yet, so
+# without this factory Moshi looks for a generated adapter, does not find it, and throws
+# at the first deserialization. Remove it once KSP codegen is wired (OFF-1).
+squareup-moshi-kotlin = { group = "com.squareup.moshi", name = "moshi-kotlin", version.ref = "moshi" }
+# Processor artifact. Inert until KSP is applied; it is the codegen path we migrate to later.
+squareup-moshi-kotlin-codegen = { group = "com.squareup.moshi", name = "moshi-kotlin-codegen", version.ref = "moshi" }
+squareup-okhttp-logging-interceptor = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
+squareup-retrofit-converter-moshi = { group = "com.squareup.retrofit2", name = "converter-moshi", version.ref = "retrofit" }
+
+# Images
+io-coil-kt-coil3 = { group = "io.coil-kt.coil3", name = "coil", version.ref = "coil" }
+io-coil-kt-coil3-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
+
+# Firebase
+firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
+firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
+firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore" }
+firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics" }
+
+# Barcode scanning
+play-services-mlkit-barcode-scanning = { group = "com.google.mlkit", name = "barcode-scanning", version.ref = "mlkitBarcodeScanning" }
+
+# Coroutines
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+
+# Testing
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
+turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
+
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
-
+# TODO(FF-3): apply this plugin ONLY after a real google-services.json exists in app/.
+# Applying it without that file HARD FAILS the build at the `processDebugGoogleServices`
+# task, so it stays declared-but-unapplied until the Firebase project is created.
+google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }

@@ -1,0 +1,318 @@
+package com.racion.diariomercado.ui.navigation
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.racion.diariomercado.RacionApplication
+import com.racion.diariomercado.domain.model.DiaryEntry
+import com.racion.diariomercado.domain.model.FoodProduct
+import com.racion.diariomercado.domain.model.MealSlot
+import com.racion.diariomercado.domain.model.Nutrition
+import com.racion.diariomercado.ui.components.NavDestination
+import com.racion.diariomercado.ui.screens.AgregarScreen
+import com.racion.diariomercado.ui.screens.AvisoScreen
+import com.racion.diariomercado.ui.screens.ConfirmarScreen
+import com.racion.diariomercado.ui.screens.EscanerScreen
+import com.racion.diariomercado.ui.screens.InformeScreen
+import com.racion.diariomercado.ui.screens.InicioScreen
+import com.racion.diariomercado.ui.screens.MetasScreen
+import com.racion.diariomercado.ui.screens.PerfilDeportivoScreen
+import com.racion.diariomercado.ui.screens.auth.LoginScreen
+import com.racion.diariomercado.ui.screens.auth.LoginViewModel
+import com.racion.diariomercado.ui.screens.auth.RegisterScreen
+import com.racion.diariomercado.ui.preview.PreviewData
+
+/** Rutas de navegación de la app como strings simples. */
+object Routes {
+    const val INICIO = "inicio"
+    const val AGREGAR = "agregar"
+    const val ESCANEAR = "escanear"
+    const val PERFIL = "perfil"
+    const val CONFIRMAR = "confirmar"
+    const val INFORME = "informe"
+    const val PERFIL_DEPORTIVO = "perfil-deportivo"
+    const val AVISO = "aviso"
+    const val LOGIN = "login"
+    const val REGISTRO = "registro"
+}
+
+/** Mapea un destino de la barra inferior a su ruta (null si no tiene pestaña). */
+private fun NavDestination.tabRoute(): String? = when (this) {
+    NavDestination.Inicio -> Routes.INICIO
+    NavDestination.Diario -> Routes.AGREGAR
+    NavDestination.Escanear -> Routes.ESCANEAR
+    NavDestination.Perfil -> Routes.PERFIL
+}
+
+/**
+ * Navegación raíz de la app. Cada pantalla renderiza su propio Scaffold y
+ * AppBottomBar internamente, así que aquí NO se agrega un Scaffold externo.
+ *
+ * ## The pending-product seam
+ * [NavResult] is a plain `mutableStateOf` holder that carries a tapped product from
+ * "Agregar" to "Confirmar", and every entry confirmed in "Confirmar" back to "Inicio".
+ *
+ * ## Auth screens are reachable but NOT gating (FF-7)
+ * [Routes.LOGIN] and [Routes.REGISTRO] exist and are fully wired, but the app still starts at
+ * [Routes.INICIO] (or [Routes.AVISO]) for a user with no session at all. That is intentional for
+ * the skeleton: gating [startRoute] on [com.racion.diariomercado.domain.repository.AuthState]
+ * cannot be done correctly from a plain `val` computed before `setContent`, exactly for the
+ * reason `MainActivity.onCreate` documents — the first emission of a cold `authState` flow has to
+ * arrive before the graph can be built, or the app flashes "aviso" at an already-onboarded user.
+ * TODO(FF-7): collect `authState` in the composition and build the NavHost on the first
+ * emission, then make LOGIN the start destination for an unauthenticated user.
+ *
+ * [NavResult.confirmedEntries] ACCUMULATES: it used to be a single nullable
+ * `confirmedEntry` that was overwritten on every confirm, so the second add silently dropped the
+ * first one from both the "Inicio" list and the header total — a data-loss bug with no error and
+ * no way for the user to notice. It is a list now so that failure mode is not expressible.
+ *
+ * TODO(ST-1): this is a TEMPORARY seam, not an architecture. It is kept in memory only, so it
+ * is lost on process death and it cannot survive a configuration change of the entry that owns
+ * it. Replace it with a shared ViewModel scoped to the activity (or a
+ * `SavedStateHandle`) before there is any real data behind it — at which point
+ * `DiaryRepository.observeDay` becomes the single source of truth and this list disappears
+ * entirely. Navigation arguments (`SavedStateHandle` on the destination) are the intended end
+ * state, not a `remember` in the graph composable.
+ */
+private class NavResult {
+    /** The product the user tapped, read by the "Confirmar" screen. */
+    var pendingProduct by mutableStateOf<FoodProduct?>(null)
+
+    /**
+     * Every entry the user has confirmed in this session, oldest first.
+     *
+     * Append-only by construction: there is no setter that can replace the list, so no call site
+     * can truncate a previous confirmation.
+     */
+    var confirmedEntries by mutableStateOf<List<DiaryEntry>>(emptyList())
+        private set
+
+    fun addConfirmedEntry(entry: DiaryEntry) {
+        confirmedEntries = confirmedEntries + entry
+    }
+}
+
+/**
+ * The application container, reached from the composition.
+ *
+ * `AppContainer` is a class owned by [RacionApplication], not a singleton object, so a composable
+ * that needs a repository has to walk [LocalContext] up to the application. That walk is
+ * deliberately confined to this one function: it is the seam FF-7 replaces, because the moment
+ * the graph is built from a `ViewModel` factory with a real scope there is no reason for a
+ * composable to know how the container is obtained at all.
+ */
+@Composable
+private fun rememberAppContainer(): com.racion.diariomercado.di.AppContainer {
+    val application = LocalContext.current.applicationContext as RacionApplication
+    return application.container
+}
+
+@Composable
+fun AppNavigation(
+    startRoute: String = Routes.INICIO,
+    onOnboardingDone: () -> Unit = {}
+) {
+    val navController = rememberNavController()
+    val navResult = remember { NavResult() }
+
+    fun selectTab(dest: NavDestination) {
+        val route = dest.tabRoute() ?: return
+        navController.navigate(route) {
+            popUpTo(navController.graph.findStartDestination().id) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
+    NavHost(navController = navController, startDestination = startRoute) {
+        composable(Routes.INICIO) {
+            // Every confirmation is merged in, not just the latest one, and the merge is sorted so
+            // the "Lo de hoy" list stays in the order things were actually eaten. The header total
+            // folds the SAME merged list, so the number can never disagree with the rows.
+            val merged = (PreviewData.meals + navResult.confirmedEntries)
+                .sortedBy { it.loggedAtEpochMillis }
+            InicioScreen(
+                // The confirmed entries are appended locally so the user sees their adds land
+                // immediately. Once DiaryRepository is real this is replaced by observing it.
+                meals = merged,
+                consumed = merged.fold(Nutrition()) { acc, entry -> acc + entry.totalNutrition },
+                onAddMeal = { navController.navigate(Routes.AGREGAR) },
+                onOpenReport = { navController.navigate(Routes.INFORME) },
+                onNavigate = ::selectTab
+            )
+        }
+        composable(Routes.AGREGAR) {
+            AgregarScreen(
+                onFoodClick = { product ->
+                    navResult.pendingProduct = product
+                    navController.navigate(Routes.CONFIRMAR)
+                },
+                // TODO(ST-2): manual entry has no affordance on this screen yet, so there is no
+                // callback to wire. When it exists it must land on a dedicated screen, NOT on
+                // ESCANEAR: Escanear already routes its own "Ingresar código manualmente" row back
+                // here, so pointing both at each other would ping-pong forever.
+                onNavigate = ::selectTab
+            )
+        }
+        composable(Routes.ESCANEAR) {
+            EscanerScreen(
+                onManualEntry = { navController.navigate(Routes.AGREGAR) },
+                // TODO(BC-1): a real scan resolves a barcode through FoodCatalogRepository and
+                // lands in the same navResult.pendingProduct seam.
+                onScanResult = {
+                    navResult.pendingProduct = PreviewData.featuredProduct
+                    navController.navigate(Routes.CONFIRMAR)
+                },
+                onNavigate = ::selectTab
+            )
+        }
+        composable(Routes.PERFIL) {
+            MetasScreen(
+                onSave = { goals ->
+                    // TODO(FF-5): goalsRepository.saveGoals(goals)
+                    navController.navigate(Routes.INICIO) {
+                        popUpTo(navController.graph.findStartDestination().id)
+                        launchSingleTop = true
+                    }
+                },
+                onOpenLogin = { navController.navigate(Routes.LOGIN) },
+                onNavigate = ::selectTab
+            )
+        }
+        composable(Routes.CONFIRMAR) {
+            val product = navResult.pendingProduct ?: PreviewData.featuredProduct
+            ConfirmarScreen(
+                product = product,
+                mealSlots = listOf(MealSlot.DESAYUNO, MealSlot.ALMUERZO, MealSlot.SNACK),
+                onAddToDiary = { units, mealSlot ->
+                    // TODO(FF-6): persist through DiaryRepository.addEntry(...). The id is
+                    // generated here so the write can be retried idempotently offline.
+                    navResult.addConfirmedEntry(
+                        DiaryEntry(
+                            id = "local-${System.currentTimeMillis()}",
+                            product = product,
+                            servings = units,
+                            mealSlot = mealSlot,
+                            loggedAtEpochMillis = System.currentTimeMillis(),
+                            // Same canonical method the "Confirmar" screen previewed this with, so
+                            // the kcal the user saw is the kcal that lands in the diary.
+                            totalNutrition = product.nutritionForUnits(units)
+                        )
+                    )
+                    navController.navigate(Routes.INICIO) {
+                        popUpTo(navController.graph.findStartDestination().id)
+                        launchSingleTop = true
+                    }
+                },
+                onNavigate = ::selectTab
+            )
+        }
+        composable(Routes.INFORME) {
+            InformeScreen(onNavigate = ::selectTab)
+        }
+        composable(Routes.PERFIL_DEPORTIVO) {
+            PerfilDeportivoScreen(
+                onContinue = { focus ->
+                    // TODO(FF-5): profileRepository.saveProfile(...)
+                    navController.navigate(Routes.PERFIL)
+                },
+                onNavigate = ::selectTab
+            )
+        }
+        composable(Routes.AVISO) {
+            AvisoScreen(
+                onAccept = {
+                    onOnboardingDone()
+                    navController.navigate(Routes.PERFIL_DEPORTIVO) {
+                        popUpTo(Routes.AVISO) { inclusive = true }
+                    }
+                },
+                onViewPolicy = {}
+            )
+        }
+
+        // TODO(FF-4): FirebaseAuthRepository throws NotImplementedError for every command, so
+        // BOTH of these screens currently land on the "Ocurrió un error inesperado" branch. That
+        // is the expected behaviour of the skeleton, not a bug to work around here: when FF-4
+        // lands, this wiring needs no change at all.
+        composable(Routes.LOGIN) {
+            // Resolved here, NOT inside `initializer {}`. That block is a plain `() -> ViewModel`,
+            // so a @Composable call in it does not compile — and hoisting it also means the
+            // container is read once per composition instead of once per factory invocation.
+            val authRepository = rememberAppContainer().authRepository
+            val viewModel: LoginViewModel = viewModel(
+                factory = viewModelFactory {
+                    initializer { LoginViewModel(authRepository) }
+                }
+            )
+            val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+            // The success branch pops the auth flow off the back stack rather than pushing
+            // INICIO on top of it: otherwise the back gesture from "Inicio" would return to the
+            // login form the user just completed.
+            LaunchedEffect(state.isLoggedIn) {
+                if (state.isLoggedIn) {
+                    navController.navigate(Routes.INICIO) {
+                        popUpTo(Routes.LOGIN) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
+            }
+
+            LoginScreen(
+                state = state,
+                onEmailChange = viewModel::updateEmail,
+                onPasswordChange = viewModel::updatePassword,
+                onSignIn = viewModel::onSignIn,
+                onSignUpClick = { navController.navigate(Routes.REGISTRO) },
+                onErrorShown = viewModel::onErrorShown
+            )
+        }
+        composable(Routes.REGISTRO) {
+            val authRepository = rememberAppContainer().authRepository
+            val viewModel: LoginViewModel = viewModel(
+                factory = viewModelFactory {
+                    initializer { LoginViewModel(authRepository) }
+                }
+            )
+            val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+            LaunchedEffect(state.isLoggedIn) {
+                if (state.isLoggedIn) {
+                    navController.navigate(Routes.INICIO) {
+                        popUpTo(Routes.REGISTRO) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
+            }
+
+            RegisterScreen(
+                state = state,
+                onEmailChange = viewModel::updateEmail,
+                onPasswordChange = viewModel::updatePassword,
+                onConfirmPasswordChange = viewModel::updateConfirmPassword,
+                onRegister = viewModel::onSignUp,
+                // popBackStack, not navigate(LOGIN): REGISTRO was pushed on top of LOGIN, so
+                // popping returns to the already-composed login form with its fields intact
+                // instead of rebuilding it.
+                onBackToLogin = { navController.popBackStack() },
+                onErrorShown = viewModel::onErrorShown
+            )
+        }
+    }
+}

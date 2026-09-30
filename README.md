@@ -41,18 +41,75 @@ App Android (Kotlin + Jetpack Compose) para llevar el registro diario de tu alim
 
 ## 🏗️ Estructura
 
+El paquete de la app es `com.racion.diariomercado`. La capa de datos todavía no está conectada:
+las pantallas se alimentan de `ui/preview/PreviewData` y corren completas sin backend.
+
 ```
-app/src/main/java/
-├─ com/nutriapp/ui/
-│  ├─ components/   # Componentes Compose reutilizables (AppComponents, bars, etc.)
-│  ├─ navigation/   # Navegación y rutas de la app (AppNavigation)
-│  ├─ screens/      # Pantallas: Inicio, Agregar, Escaner, Confirmar, Informe, Metas, Perfil
-│  ├─ theme/        # Color, Theme y Tipografía
-│  └─ AppNavigation.kt
-├─ com/example/myapplication/   # MainActivity + entry point de CompatActivity
-└─ res/             # Recursos: drawables, mipmaps, values, xml de backup
+app/src/main/java/com/racion/diariomercado/
+├─ MainActivity.kt        # Activity + punto de entrada
+├─ RacionApplication.kt   # Application:dueña del contenedor de dependencias
+├─ core/                  # AppResult / AppError (taxonomía de fallos)
+├─ di/                    # AppContainer: DI manual (sin Hilt)
+├─ domain/
+│  ├─ model/              # Nutrition, FoodProduct, DiaryEntry, DailySummary, WeeklyReport,
+│  │                      #   NutritionGoals, UserProfile + enums (MealSlot, DayOfWeek, SportFocus)
+│  └─ repository/         # Interfaces: FoodCatalog, Diary, Goals, Profile
+├─ data/                  # Implementaciones (TODOs marcados)
+│  ├─ openfood/           # Retrofit service, DTOs Moshi, repositorio del catálogo
+│  │  └─ dto/
+│  └─ firebase/           # Los tres repositorios de Firestore
+└─ ui/
+   ├─ components/         # AppComponents: MealRow, MacroStat, OptionPill, DarkStatCard, etc.
+   ├─ navigation/         # AppNavigation y rutas
+   ├─ preview/            # PreviewData: todos los datos fake centralizados
+   ├─ screens/            # Pantallas: Inicio, Agregar, Escaner, Confirmar, Informe, Metas,
+   │                      #   PerfilDeportivo, Aviso
+   └─ theme/              # Color, Theme y Tipografía
+
+docs/
+├─ ROADMAP.md             # Checklist por fases (FF-N / OFF-N / BC-N / ST-N / Q-N)
+└─ INTEGRATION.md         # Referencia verificada de Open Food Facts y Firestore
 ```
+
+**Regla de dependencia:** `ui` → `domain` → nada. `data` implementa `domain` y conoce `domain`.
+Ningún archivo de `domain/` importa Compose, Android ni `kotlinx`. Los repositorios son
+`internal`: nadie fuera de `data/` sabe que existe Open Food Facts o Firestore.
+
+## 🗺️ Estado del proyecto / Próximos pasos
+
+La app es, hoy, **UI + tema + navegación funcionando sobre datos fake**. La capa de datos está
+declarada como interfaces y esqueletos, pero los métodos son `TODO(...)`: no hay red ni
+persistencia todavía. Es intencional — la prioridad era que el modelo de dominio y los seams
+quedaran correctos antes de conectar un backend.
+
+Para seguir:
+
+1. **[`docs/ROADMAP.md`](docs/ROADMAP.md)** — el checklist ordenado por fases. Empezá por la
+   Fase 2 (Firebase) o la Fase 3 (Open Food Facts); cada tarea tiene un ID (`FF-N`, `OFF-N`)
+   que podés buscar con `grep` en los `TODO` del código.
+2. **[`docs/INTEGRATION.md`](docs/INTEGRATION.md)** — la referencia externa verificada
+   (endpoints de Open Food Facts, límites de tasa, nombres exactos de los campos `nutriments`,
+   límites y trampas de Firestore). Está para que nadie tenga que volver a deducirla.
+
+Lo primero que falla si se saltea, y conviene saber de antemano:
+
+- **Open Food Facts bloquea requests sin `User-Agent` válido** (`AppName/Version (contact)`).
+  Sin eso la API devuelve 403/503 y no hay resultados.
+- **Un producto inexistente devuelve HTTP 200**, con `status: 0` y `product: null`. Hay que
+  mirar el body, no solo el código HTTP.
+- **La búsqueda de texto libre solo existe en el endpoint v1** (`cgi/search.pl`); la v2 no la
+  soporta. Y está prohibido el search-as-you-type: el límite es de 10 requests/minuto.
+
+Decisiones abiertas (Firestore vs Realtime Database, auth anónimo vs cuentas reales, Hilt o no,
+cachear OFF) están en la sección **Decisions to make** del roadmap.
 
 ## 📄 Licencia
 
-Proyecto personal. Todos los derechos reservados (all rights reserved).
+Código fuente: © 2025 INOTJuannnka. Todos los derechos reservados. Proyecto personal, sin
+licencia abierta.
+
+**Datos de terceros:** los datos de productos provienen de
+[Open Food Facts](https://world.openfoodfacts.org) y están bajo
+[ODbL](https://opendatacommons.org/licenses/odbl/1-0/); las imágenes de productos bajo CC-BY-SA.
+Atribución a Open Food Facts obligatoria. Ver `docs/INTEGRATION.md`.
+

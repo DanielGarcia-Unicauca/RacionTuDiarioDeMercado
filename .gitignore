@@ -13,3 +13,15 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Firebase config — never commit, it contains the project id and API keys
+google-services.json
+# Local secrets
+.env
+.env.local
+*.keystore
+*.jks
+
+# Tooling metadata (OpenCode skill registry cache, IDE-local files)
+.atl/
+/.idea/vcs.xml
