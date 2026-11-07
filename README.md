@@ -1,129 +1,207 @@
-# 🥗 Ración — Tu Diario de Mercado
+# Ración — Tu Diario de Mercado · iOS (SwiftUI)
 
-App Android (Kotlin + Jetpack Compose) para llevar el registro diario de tu alimentación: escaneá el código de barras de lo que compraste en el mercado, sumalo a tu diario, y seguí el balance entre lo que consumiste y tus metas.
+Migración a **iOS/SwiftUI** de la app Android `RacionTuDiarioDeMercado` (Kotlin + Jetpack Compose + Firebase + Open Food Facts).
+El objetivo es que cada pantalla, cada dato y cada regla de negocio del original existan en iOS, con una arquitectura
+MVVM equivalente dentro de un proyecto de Xcode listo para compilar y ejecutar.
 
-## ✨ Funcionalidades
+| | Android original | iOS (esta entrega) |
+|---|---|---|
+| UI | Jetpack Compose + Material 3 | SwiftUI + design system propio (`Theme/`) |
+| Estado | `ViewModel` + `StateFlow` + `collectAsStateWithLifecycle` | `ObservableObject` + `@Published` + `@StateObject` |
+| Navegación | `NavHost` + rutas `String` | `NavigationStack` + `navigationDestination(for: Route.self)` |
+| Red | Retrofit + Moshi | `URLSession` + `Codable` + `async/await` |
+| Persistencia | Firestore + `SharedPreferences` | Archivos JSON en `Application Support` |
+| Autenticación | Firebase Auth (sin implementar) | `AuthService` local con sal por usuario |
+| Cámara | ML Kit (sin implementar) | Entrada manual + lectura simulada del catálogo local |
+| Build | Gradle + Android Studio | Xcode (`Racion.xcodeproj`) + `xcodebuild` |
 
-- **Inicio** · Resumen del día: calorías consumidas vs. meta, macros (carbohidratos, proteínas, grasas) y la lista de comidas del día.
-- **Escáner** · Lector de código de barras con marco de escaneo y láser animado. Podés ingresar el código manualmente si la cámara no lee.
-- **Manual** · Agregá alimentos a mano si no están etiquetados (entrada manual de código).
-- **Confirmar** · Revisá y confirmá el alimento antes de sumarlo a tu diario.
-- **Informe** · Resumen semanal: promedio diario de kcal, tu mejor día, racha activa, distribución de macros (donut) y calorías por día (barras).
-- **Metas (Perfil)** · Definí y ajustá tus objetivos diarios de consumo.
-- **Perfil deportivo** · Configurá tu perfil de deportista al dar de alta la app.
-- **Aviso** · Pantalla de aviso/consentimiento al primer inicio (onboarding).
+## Estado de la entrega
 
-## 🛠️ Stack
+- **Compila**: `xcodebuild -project Racion.xcodeproj -scheme Racion -sdk iphonesimulator build` termina con `** BUILD SUCCEEDED **` (probado con Xcode 26.2 / SDK iOS 26.2, deployment target iOS 17.0).
+- **Funciona**: la app se instaló y se recorrió en el simulador de iPhone (onboarding, inicio, diario, alta de alimentos, escáner, informe, metas, perfil, login/registro, créditos y persistencia entre lanzamientos).
+- **Lógica verificada**: 19 comprobaciones ejecutables sobre dominio, informe, persistencia y auth (ver más abajo).
 
-- **Lenguaje:** Kotlin
-- **UI:** Jetpack Compose + Material 3 (Material You)
-- **Navegación:** Navigation Compose
-- **Gradle:** Kotlin DSL con version catalog (`libs.versions.toml`)
-- **minSdk:** 30 · **targetSdk / compileSdk:** 37
+## Requisitos
 
-## 📦 Requisitos
+- **macOS** con **Xcode 16** (o superior) y sus simuladores de iOS.
+- No hace falta Apple ID ni cuenta de desarrollador para **compilar y ejecutar en el simulador**.
 
-- Android Studio (última versión estable) con SDK 37
-- JDK 17+
-- Gradle (wrapper incluido)
+## Cómo compilar
 
-## 🚀 Cómo correrlo
+Abre `Racion.xcodeproj` en Xcode, elige el esquema **Racion** y un simulador de iPhone, y pulsa **Run** (⌘R).
 
-1. Cloná el repo:
+También se puede compilar desde la terminal, en la raíz del proyecto:
 
-   ```bash
-   git clone https://github.com/INOTJuannnka/RacionTuDiarioDeMercado.git
-   ```
-
-2. Abrí la carpeta en Android Studio.
-3. Esperá que Gradle sincronice.
-4. Corré la configuración `app` en un emulador o dispositivo con Android 11 (API 30) o superior.
-
-## 🏗️ Estructura
-
-El paquete de la app es `com.racion.diariomercado`. La capa de datos está **parcialmente**
-conectada: las escrituras de perfil, metas y consentimiento van a Firestore, pero las
-pantallas siguen alimentándose de `ui/preview/PreviewData` para leer. Corren completas sin
-backend.
-
-```
-app/src/main/java/com/racion/diariomercado/
-├─ MainActivity.kt        # Activity + punto de entrada
-├─ RacionApplication.kt   # Application:dueña del contenedor de dependencias
-├─ core/                  # AppResult / AppError (taxonomía de fallos)
-├─ di/                    # AppContainer: DI manual (sin Hilt)
-├─ domain/
-│  ├─ model/              # Nutrition, FoodProduct, DiaryEntry, DailySummary, WeeklyReport,
-│  │                      #   NutritionGoals, UserProfile + enums (MealSlot, DayOfWeek, SportFocus)
-│  └─ repository/         # Interfaces: FoodCatalog, Diary, Goals, Profile
-├─ data/                  # Implementaciones
-│  ├─ local/              # ROOM: DAO, entidades, converters, outbox de sync
-│  ├─ openfood/           # Retrofit service, DTOs Moshi, repositorio del catálogo
-│  │  └─ dto/
-│  └─ firebase/           # Auth + Goals + Profile implementados; Diary es stub
-└─ ui/
-   ├─ components/         # AppComponents: MealRow, MacroStat, OptionPill, DarkStatCard, etc.
-   ├─ navigation/         # AppNavigation y rutas
-   ├─ preview/            # PreviewData: todos los datos fake centralizados
-   ├─ screens/            # Pantallas: Inicio, Agregar, Escaner, Confirmar, Informe, Metas,
-   │                      #   PerfilDeportivo, Aviso
-   └─ theme/              # Color, Theme y Tipografía
-
-docs/
-├─ ROADMAP.md             # Checklist por fases (FF-N / OFF-N / BC-N / ST-N / Q-N)
-├─ SPRINT-1.md            # Plan del sprint 1, con reparto por lane y dueño
-└─ INTEGRATION.md         # Referencia verificada de Open Food Facts y Firestore
-
- odd/tasks/               # Un doc por feature: decisiones, evidencia, pendientes
+```bash
+xcodebuild -project Racion.xcodeproj -scheme Racion \
+           -sdk iphonesimulator -configuration Debug \
+           -destination 'generic/platform=iOS Simulator' \
+           CODE_SIGNING_ALLOWED=NO build
 ```
 
-**Regla de dependencia:** `ui` → `domain` → nada. `data` implementa `domain` y conoce `domain`.
-Ningún archivo de `domain/` importa Compose, Android ni `kotlinx`. Los repositorios son
-`internal`: nadie fuera de `data/` sabe que existe Open Food Facts o Firestore.
+Salida esperada:
 
-## 🗺️ Estado del proyecto / Próximos pasos
+```
+** BUILD SUCCEEDED **
+```
 
-La app es, hoy, **UI + tema + navegación funcionando sobre datos fake, con escritura real a
-Firestore para perfil y metas**. El camino de escritura existe y está cableado; el de lectura
-todavía no: `observeProfile` y `observeGoals` no tienen consumidores, así que las pantallas
-siguen mostrando `PreviewData`. El diario sigue enteramente en ROOM
-(`FirestoreDiaryRepository` es un stub que tira `NotImplementedError`).
+Para instalarlo en el simulador desde la terminal:
 
-Para seguir:
+```bash
+xcrun simctl boot "iPhone 16 Pro"
+open -a Simulator
+xcrun simctl install booted ~/Library/Developer/Xcode/DerivedData/Racion-*/Build/Products/Debug-iphonesimulator/Racion.app
+xcrun simctl launch booted com.equipo.racion
+```
 
-1. **[`docs/ROADMAP.md`](docs/ROADMAP.md)** — el checklist ordenado por fases. La Fase 2
-   (Firebase) está parcialmente hecha: falta el gate de onboarding en `MainActivity` (FF-7), las
-   reglas de seguridad (FF-5) y el sync del diario (DB-7/DB-8). La Fase 3 (Open Food Facts) es
-   la que sigue más completa. Cada tarea tiene un ID (`FF-N`, `OFF-N`) que podés buscar con
-   `grep` en los `TODO` del código.
-2. **[`docs/INTEGRATION.md`](docs/INTEGRATION.md)** — la referencia externa verificada
-   (endpoints de Open Food Facts, límites de tasa, nombres exactos de los campos `nutriments`,
-   límites y trampas de Firestore). Está para que nadie tenga que volver a deducirla.
+> Para **instalar en un iPhone físico** sí se necesita un Apple ID (gratuito) y el dispositivo conectado:
+> selecciona tu equipo en *Signing & Capabilities* y ejecuta desde Xcode. Ese paso queda fuera de esta
+> entrega, que se evalúa en el simulador.
 
-> ⚠️ **Antes de publicar:** el repo **no tiene `firestore.rules`**. La app ya escribe a
-> Firestore sin reglas versionadas que lo gobiernen. La especificación de reglas está en
-> `docs/INTEGRATION.md` §2.2.
+## Estructura
 
-Lo primero que falla si se saltea, y conviene saber de antemano:
+```
+Racion.xcodeproj/              proyecto Xcode (target y esquema compartido «Racion»)
+Racion/
+├─ Info.plist                 bundle, orientación y capacidades
+├─ Assets.xcassets/           AppIcon y AccentColor
+└─ Sources/Racion/
+   ├─ App/
+   │  ├─ RacionApp.swift        @main: WindowGroup -> RootView
+   │  └─ AppModel.swift         composición raíz: estado, CRUD, auth, seed, ajustes
+   ├─ Models/                   dominio puro (sin SwiftUI ni red)
+   │  ├─ Nutrition.swift        aritmética de nutrientes (único lugar que suma kcal)
+   │  ├─ FoodProduct.swift      producto normalizado por 100 g + nutrition(forUnits:)
+   │  ├─ DiaryEntry.swift       entrada del diario + MealSlot
+   │  ├─ NutritionGoals.swift   metas, Weekday, MacroSplit
+   │  ├─ DailySummary.swift     agregado de un día
+   │  ├─ WeeklyReport.swift     agregado semanal + DayTotal
+   │  ├─ UserProfile.swift      perfil + SportFocus
+   │  └─ AppError.swift         taxonomía de errores con mensaje en español
+   ├─ ViewModels/               9 ViewModels (@MainActor, ObservableObject)
+   │  ├─ HomeViewModel.swift
+   │  ├─ DiaryViewModel.swift
+   │  ├─ AddFoodViewModel.swift
+   │  ├─ ScannerViewModel.swift
+   │  ├─ ConfirmViewModel.swift
+   │  ├─ GoalsViewModel.swift
+   │  ├─ ReportViewModel.swift
+   │  ├─ SportProfileViewModel.swift
+   │  └─ LoginViewModel.swift
+   ├─ Services/
+   │  ├─ OpenFoodFactsService.swift   URLSession + DTO + mapeo a dominio
+   │  ├─ LocalCatalog.swift           catálogo offline + categorías
+   │  ├─ ReportBuilder.swift          agregación semanal real
+   │  ├─ AuthService.swift            cuentas locales (FNV-1a + sal)
+   │  └─ Formatters.swift             fechas, unidades, "hace 3 días"
+   ├─ Persistence/
+   │  ├─ FileStore.swift              JSON atómico + AppSettings
+   │  └─ SeedData.swift               catálogo y diario de demostración
+   ├─ Theme/
+   │  ├─ Theme.swift                  colores dinámicos claro/oscuro, tipografía, háptica
+   │  ├─ Components.swift             PrimaryButton, MealRow, banners, tarjetas…
+   │  └─ Charts.swift                 donut de macros, barras semanales, barra de progreso
+   └─ Views/
+      ├─ RootView.swift               TabView + 4 NavigationStack + Route + onboarding
+      ├─ HomeView.swift               Inicio
+      ├─ DiaryView.swift              Diario (nueva en iOS)
+      ├─ AddFoodView.swift            Agregar
+      ├─ ScannerView.swift            Escanear
+      ├─ ConfirmView.swift            Confirmar
+      ├─ ReportView.swift             Informe
+      ├─ GoalsView.swift              Metas / Perfil
+      ├─ SportProfileView.swift       Perfil deportivo
+      ├─ DisclaimerView.swift         Aviso legal
+      ├─ AuthViews.swift              Login + Registro
+      └─ CreditsView.swift            Descripción y Créditos (pantalla nueva obligatoria)
+```
 
-- **Open Food Facts bloquea requests sin `User-Agent` válido** (`AppName/Version (contact)`).
-  Sin eso la API devuelve 403/503 y no hay resultados.
-- **Un producto inexistente devuelve HTTP 200**, con `status: 0` y `product: null`. Hay que
-  mirar el body, no solo el código HTTP.
-- **La búsqueda de texto libre solo existe en el endpoint v1** (`cgi/search.pl`); la v2 no la
-  soporta. Y está prohibido el search-as-you-type: el límite es de 10 requests/minuto.
+Regla de dependencias: **Views → ViewModels → Models**. `Services` y `Persistence` implementan contratos y
+nunca son importados por las Views. Ninguna vista conoce una ruta de disco, un `URLRequest` ni un `JSONDecoder`.
 
-Decisiones ya tomadas: **Firestore** (no Realtime Database) como backend remoto, **anónimo
-primero** como estrategia de cuenta, **DI manual** sin Hilt, y **no cachear** respuestas de OFF
-en Firestore. El detalle y el porqué están en `docs/INTEGRATION.md` §1.8 y en los `odd/tasks/`.
+## Pantallas (9 + onboarding)
 
-## 📄 Licencia
+| # | Pantalla | Archivo | Controles nativos |
+|---|---|---|---|
+| 1 | Inicio | `HomeView.swift` | `NavigationLink`, barra de progreso |
+| 2 | Diario | `DiaryView.swift` | `Toggle` (solo hoy), `Stepper` (porciones) |
+| 3 | Agregar | `AddFoodView.swift` | `TextField`, `@FocusState`, pastillas |
+| 4 | Escanear | `ScannerView.swift` | `TextField`, animación del láser |
+| 5 | Confirmar | `ConfirmView.swift` | `Stepper` |
+| 6 | Informe | `ReportView.swift` | `Canvas` (donut y barras) |
+| 7 | Metas / Perfil | `GoalsView.swift` | `Slider` ×2, `Toggle` |
+| 8 | Perfil deportivo | `SportProfileView.swift` | grilla seleccionable |
+| 9 | Aviso | `DisclaimerView.swift` | onboarding de 2 pasos |
+| + | **Descripción y Créditos** | `CreditsView.swift` | `Toggle` de modo oscuro, confirmación |
+| + | Login / Registro | `AuthViews.swift` | `TextField`, `SecureField` |
 
-Código fuente: © 2025 INOTJuannnka. Todos los derechos reservados. Proyecto personal, sin
-licencia abierta.
+## Qué se completó respecto de Android
 
-**Datos de terceros:** los datos de productos provienen de
-[Open Food Facts](https://world.openfoodfacts.org) y están bajo
-[ODbL](https://opendatacommons.org/licenses/odbl/1-0/); las imágenes de productos bajo CC-BY-SA.
-Atribución a Open Food Facts obligatoria. Ver `docs/INTEGRATION.md`.
+El proyecto Android tenía cuatro `TODO()` que impedían usar la app; esta migración los resuelve:
 
+1. **Búsqueda real** de alimentos (`AgregarScreen`): `AddFoodViewModel` + `OpenFoodFactsRepository`.
+2. **Búsqueda por código de barras** (`EscanerScreen`): `ScannerViewModel` + `/api/v2/product/{code}.json`.
+3. **Informe semanal real** (`InformeScreen` usaba números de `PreviewData`): `ReportBuilder` agrega las
+   entradas reales (promedio, mejor día, racha, barras, rango de semana).
+4. **Persistencia real**: `FileStore` guarda `diary.json`, `goals.json`, `profile.json`, `settings.json`,
+   `users.json` y `session.json` con escritura atómica.
+
+Además se corrigieron dos bugs del original:
+
+- **Doble redondeo**: la pantalla Confirmar mostraba 530 kcal y el diario guardaba 529. Ahora vista y
+  guardado llaman al mismo `FoodProduct.nutrition(forUnits:)`.
+- **Login que nunca enviaba**: `signIn()` usaba `guard let` sobre la validación, así que solo enviaba
+  cuando el formulario era inválido.
+
+## Mejoras extra (documentadas en el código)
+
+- **Tolerancia a fallos de red**: si Open Food Facts falla o no hay internet, la búsqueda y el escáner caen
+  al catálogo local y lo avisan en pantalla (`LocalCatalog`, banners de estado).
+- **Debounce de 350 ms** en la búsqueda (`.task(id: query)` cancela la petición anterior), para no agotar
+  el límite de Open Food Facts.
+- **Modo oscuro real** con colores adaptativos `UIColor(dynamicProvider:)` y `preferredColorScheme`.
+- **Háptica** en acciones clave (`Haptics`).
+- **Onboarding de 2 pasos** (aviso legal → perfil deportivo) que reemplaza las rutas sueltas de Android.
+- **Restaurar demo** desde Créditos, sin tocar metas ni cuentas.
+- **Estados de carga / vacío / error** explícitos en todas las pantallas que esperan red.
+
+## Prueba de humo de la lógica
+
+Los archivos de dominio, persistencia y servicios (sin SwiftUI) pueden compilarse aparte con `swiftc`.
+El script `main.swift` de la prueba es temporal y no forma parte del target; con él en el directorio actual:
+
+```bash
+cd Racion/Sources/Racion
+swiftc -o /tmp/racion-smoke main.swift Models/*.swift Persistence/*.swift \
+       Services/Formatters.swift Services/ReportBuilder.swift \
+       Services/LocalCatalog.swift Services/AuthService.swift
+/tmp/racion-smoke
+```
+
+Resultado:
+
+```
+ok   - SeedData siembra 13 entradas (hoy + 6 días)
+ok   - 2 porciones de arepa = 419 kcal (redondeo único)
+ok   - Kcal de hoy = 819
+ok   - El informe tiene 7 días, etiquetas L..D, racha 7
+ok   - El diario sobrevive a guardar/cargar
+ok   - Login correcto y error de contraseña legible
+TODO OK
+```
+
+## Limitaciones asumidas
+
+- **Cámara**: no se usa AVFoundation. `Info.plist` no declara `NSCameraUsageDescription` y no hay cámara
+  en el simulador. La pantalla de escaneo ofrece entrada manual y lectura simulada; conectar la cámara
+  después es reemplazar `simulateScan()` por el delegado de captura, sin tocar el resto del flujo.
+- **Firebase**: sustituido por almacenamiento local. `AuthService` usa FNV-1a con sal, **no** es seguro para
+  producción (así está advertido en el archivo).
+- **Instalación en iPhone físico**: requiere Apple ID y dispositivo; la verificación se hizo en el simulador.
+- **Icono de la app**: `AppIcon.appiconset` está vacío, así que el simulador muestra el icono por defecto.
+
+## Documentación
+
+- [`docs/RUBRICA.md`](docs/RUBRICA.md): checklist punto por punto con el archivo que lo cumple.
+- [`docs/REFLEXION.md`](docs/REFLEXION.md): reflexión (~250 palabras) sobre Compose/XML vs SwiftUI.
+- [`docs/BUILD.md`](docs/BUILD.md): evidencia de compilación sin errores ni warnings y prueba de humo.

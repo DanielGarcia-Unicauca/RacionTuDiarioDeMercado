@@ -1,39 +1,25 @@
 rules_version = '2';
+
+// Reglas de Cloud Firestore para Racion.
+// Cada usuario solo puede leer y escribir sus propios datos (users/{uid}/...).
+// Publicar con: firebase deploy --only firestore:rules
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper function: request must be from the document's owner
-    function isOwner(uid) {
-      return request.auth != null && request.auth.uid == uid;
-    }
 
-    // User profile: users/{uid}/profile/main
-    match /users/{uid}/profile/{profileId} {
-      allow read, write: if isOwner(uid);
-    }
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
 
-    // User goals: users/{uid}/goals/main
-    match /users/{uid}/goals/{goalId} {
-      allow read, write: if isOwner(uid);
-    }
-
-    // Day documents and entries subcollection: users/{uid}/days/{dayKey}
-    match /users/{uid}/days/{dayKey} {
-      allow read, write: if isOwner(uid);
-
-      // Entries subcollection: users/{uid}/days/{dayKey}/entries/{entryId}
+      // Diario: una entrada por documento.
       match /entries/{entryId} {
-        allow read, write: if isOwner(uid);
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // Metas (meta/goals) y perfil (meta/profile).
+      match /meta/{docId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
       }
     }
 
-    // Onboarding consent: users/{uid}/onboarding/completed
-    match /users/{uid}/onboarding/{doc} {
-      allow read, write: if isOwner(uid);
-    }
-
-    // Catch-all: deny any other access
-    match /{document=**} {
-      allow read, write: if false;
-    }
+    // Todo lo demás queda denegado por defecto.
   }
 }
